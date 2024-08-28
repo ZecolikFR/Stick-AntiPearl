@@ -1,0 +1,14 @@
+---
+# Plugin par stefaneh.
+Item:
+  name: "minecraft:stone"
+  # le time et pour l'antipearl de la victime.
+# en Seconde
+time: 10
+# pour celui qui utilise le stick
+cooldown: 10
+msg-cooldown-user: "§c Vous devez attendre {time} pour réutiliser le stick !"
+msg-cooldown: "§c il vous reste {time} seconde pour pouvoir lancé votre enderpearl !"
+msg-victim: "§c vous ne pouvez plus lancez de pearl pendant 10 seconde."
+msg-already: "§c {player} et déja sous antipearl."
+...
