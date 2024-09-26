@@ -69,7 +69,6 @@ class Load extends PluginBase implements Listener
     {
         $player = $event->getPlayer();
         $itemUsed = $event->getItem()->getName();
-        $config = $this->getConfig();
         $enderPearlName = StringToItemParser::getInstance()->parse(ItemTypeNames::ENDER_PEARL)->getName();
 
         if ($itemUsed !== $enderPearlName) {
