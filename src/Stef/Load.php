@@ -2,67 +2,95 @@
 
 namespace Stef;
 
-
+use pocketmine\data\bedrock\item\ItemTypeNames;
 use pocketmine\event\entity\EntityDamageByEntityEvent;
 use pocketmine\event\Listener;
 use pocketmine\event\player\PlayerItemUseEvent;
-use pocketmine\item\LegacyStringToItemParser;
-use pocketmine\item\VanillaItems;
+use pocketmine\item\StringToItemParser;
 use pocketmine\player\Player;
 use pocketmine\plugin\PluginBase;
-use pocketmine\utils\Config;
 
 class Load extends PluginBase implements Listener
 {
-    private array $c = [];
-    private array $cd = [];
+    private array $playerCooldowns = [];
+    private array $entityCooldowns = [];
+    private string $itemName;
+    private int $cooldownTime;
+    private int $entityCooldownTime;
 
+    protected function onEnable(): void
+    {
+        $this->saveDefaultConfig();
+        $config = $this->getConfig();
+        
+        $this->itemName = StringToItemParser::getInstance()->parse($config->getNested("Item.name"))->getName();
+        $this->cooldownTime = $config->get("cooldown");
+        $this->entityCooldownTime = $config->get("time");
 
-protected function onEnable(): void
-{
-    $this->saveDefaultConfig();
-    $this->getLogger()->info(" By stefaneh.");
-    $this->getServer()->getPluginManager()->registerEvents($this,$this);
-}
-
-public function Activate(EntityDamageByEntityEvent $e){
-        $cfg = $this->getConfig();
-    $damager = $e->getDamager();
-    $p = $e->getEntity();
-    if($p instanceof Player && $damager instanceof Player){
-        $psd = $p->getName();
-        $ps = $damager->getName();
-        $id = $damager->getInventory()->getItemInHand()->getName();
-       if($id ===  LegacyStringToItemParser::getInstance()->parse($cfg->getNested("Item.name"))->getName()){
-           if(isset($this->c[$ps]) && time() - $this->c[$ps] < $cfg->get("cooldown")){
-               $e->cancel();
-               $restant = $cfg->get("cooldown") - (time() - $this->c[$ps]);
-               $damager->sendMessage(str_replace('{time}',$restant,$cfg->get("msg-cooldown-user")));
-           }else{
-               $this->c[$ps] = time();
-               if(isset($this->cd[$psd]) && time() - $this->cd[$psd] < $cfg->get("time")){
-                   $damager->sendMessage(str_replace('{player}',$p->getName(),$cfg->get("msg-already")));
-               }else{
-                   $this->cd[$psd] = time();
-               }
-           }
-
-       }
+        $this->getLogger()->info("By stefaneh.");
+        $this->getServer()->getPluginManager()->registerEvents($this, $this);
     }
-}
 
-public function UsePearl(PlayerItemUseEvent $e){
-        $cfg  = $this->getConfig();
-        $p = $e->getPlayer();
-        $psd = $p->getName();
-        $id = $e->getItem()->getName();
-        if($id === LegacyStringToItemParser::getInstance()->parse(VanillaItems::ENDER_PEARL()->getName())->getName()){
-            if(isset($this->cd[$psd]) && time() - $this->cd[$psd] < $cfg->get("time")){
-                $e->cancel();
-                $restant = $cfg->get("time") - (time() - $this->cd[$psd]);
-                $p->sendMessage(str_replace('{time}',$restant,$cfg->get("msg-cooldown")));
-            }
+    public function onEntityDamage(EntityDamageByEntityEvent $event): void
+    {
+        $damager = $event->getDamager();
+        $entity = $event->getEntity();
+
+        if (!$damager instanceof Player || !$entity instanceof Player) {
+            return;
         }
-}
 
+        $damagerName = $damager->getName();
+        $entityName = $entity->getName();
+        $itemInHand = $damager->getInventory()->getItemInHand()->getName();
+
+        if ($itemInHand !== $this->itemName) {
+            return;
+        }
+
+        
+        if ($this->isInCooldown($damagerName, $this->playerCooldowns, $this->cooldownTime)) {
+            $this->sendCooldownMessage($damager, $this->cooldownTime, $this->playerCooldowns[$damagerName], "msg-cooldown-user");
+            $event->cancel();
+            return;
+        }
+
+        $this->playerCooldowns[$damagerName] = time();
+
+        
+        if ($this->isInCooldown($entityName, $this->entityCooldowns, $this->entityCooldownTime)) {
+            $damager->sendMessage(str_replace('{player}', $entityName, $this->getConfig()->get("msg-already")));
+        } else {
+            $this->entityCooldowns[$entityName] = time();
+        }
+    }
+
+    public function onItemUse(PlayerItemUseEvent $event): void
+    {
+        $player = $event->getPlayer();
+        $itemUsed = $event->getItem()->getName();
+        $config = $this->getConfig();
+        $enderPearlName = StringToItemParser::getInstance()->parse(ItemTypeNames::ENDER_PEARL)->getName();
+
+        if ($itemUsed !== $enderPearlName) {
+            return;
+        }
+
+        
+        if ($this->isInCooldown($player->getName(), $this->entityCooldowns, $this->entityCooldownTime)) {
+            $this->sendCooldownMessage($player, $this->entityCooldownTime, $this->entityCooldowns[$player->getName()], "msg-cooldown");
+            $event->cancel();
+        }
+    }
+
+    private function isInCooldown(string $name, array $cooldownArray, int $cooldownDuration): bool
+    {
+        return isset($cooldownArray[$name]) && (time() - $cooldownArray[$name]) < $cooldownDuration;
+    }
+
+    private function sendCooldownMessage(Player $player, int $cooldownDuration, int $lastUsed, string $messageKey): void
+    {
+        $remainingTime = $cooldownDuration - (time() - $lastUsed);
+        $player->sendMessage(str_replace('{time}', $remainingTime, $this->getConfig()->get($messageKey)));
+    }
 }
